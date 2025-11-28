@@ -1,0 +1,113 @@
+# Elastic Stack for Observability - ElasticSearch + Kibana + Filebeat + Metricbeat
+# This docker-compose provides centralized logging and metrics for the microservices architecture.
+#
+# Usage:
+#   docker-compose -f docker-compose-elastic.yml up -d
+#
+# Access:
+#   - Kibana: http://localhost:5601
+#   - ElasticSearch: http://localhost:9200
+#
+# Note: In production, always enable authentication and TLS for Elasticsearch and Kibana.
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: elasticsearch
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=observability-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      # Disable security for local development (enable in production!)
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - elastic
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -vq '\"status\":\"red\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.1
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana
+      # Disable security for local development (enable in production!)
+      - XPACK_SECURITY_ENABLED=false
+    ports:
+      - "5601:5601"
+    networks:
+      - elastic
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:5601/api/status | grep -q 'available'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.1
+    container_name: filebeat
+    user: root
+    command: filebeat -e -strict.perms=false
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      # Mount container logs for autodiscover
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Mount the microservices log files
+      - ../users-service/logs.json:/var/log/microservices/users-service/logs.json:ro
+      - ../products-service/logs.json:/var/log/microservices/products-service/logs.json:ro
+      - ../orders-service/logs.json:/var/log/microservices/orders-service/logs.json:ro
+    networks:
+      - elastic
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:8.11.1
+    container_name: metricbeat
+    user: root
+    command: metricbeat -e -strict.perms=false
+    volumes:
+      - ./metricbeat/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
+      - /proc:/hostfs/proc:ro
+      - /:/hostfs:ro
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    networks:
+      - elastic
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  elastic:
+    driver: bridge
+
+volumes:
+  elasticsearch_data:
+    driver: local
