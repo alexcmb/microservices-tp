@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orders
+  template:
+    metadata:
+      labels:
+        app: orders
+    spec:
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 2000
+      containers:
+      - name: orders
+        image: dockeralexcmb/orders-service:v1.2
+        ports:
+        - containerPort: 8002
+        env:
+        - name: PORT
+          value: "8002"
+        - name: USERS_SERVICE_URL
+          value: "http://users-service:8000"
+        - name: PRODUCTS_SERVICE_URL
+          value: "http://products-service:8001"
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: orders-secret
+              key: API_KEY
+        imagePullPolicy: IfNotPresent
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders-service
+spec:
+  selector:
+    app: orders
+  ports:
+  - port: 8002
+    targetPort: 8002
+  type: ClusterIP  # Externe pour tests (ou ClusterIP + port-forward)
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: orders-secret
+type: Opaque
+data:
+  API_KEY: eW91ci1zZWNyZXQta2V5  # Base64 de "your-secret-key" (echo -n 'your-secret-key' | base64)

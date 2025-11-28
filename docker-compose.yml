@@ -1,0 +1,27 @@
+services:
+  users:
+    build: ./users-service
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./users-service/.env
+    restart: unless-stopped
+
+  products:
+    build: ./products-service
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./products-service/.env
+    restart: unless-stopped
+
+  orders:
+    build: ./orders-service
+    ports:
+      - "8002:8002"
+    env_file:
+      - ./orders-service/.env
+    depends_on:
+      - users
+      - products
+    restart: unless-stopped

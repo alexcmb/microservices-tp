@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: users
+  template:
+    metadata:
+      labels:
+        app: users
+    spec:
+      securityContext:
+        runAsUser: 1000  # Non-root
+        fsGroup: 2000
+      containers:
+      - name: users
+        image: dockeralexcmb/users-service:v1.2
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PORT
+          value: "8000"
+        imagePullPolicy: IfNotPresent
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: users-service
+spec:
+  selector:
+    app: users
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP  # Interne
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: orders-secret
+type: Opaque
+data:
+  API_KEY: eW91ci1zZWNyZXQta2V5  # Base64 de "your-secret-key" (echo -n 'your-secret-key' | base64)
